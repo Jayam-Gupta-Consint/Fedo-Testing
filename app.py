@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -25,6 +26,15 @@ app = FastAPI(
     title="Fedo Callback Service",
     description="Service to receive and store Fedo scan callback results",
     version="1.0.0"
+)
+
+# Add CORS middleware - IMPORTANT for cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for testing; restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Database setup
@@ -139,7 +149,7 @@ async def root():
         </div>
         
         <hr>
-        <p><small>Fedo Testing Service v1.0.0</small></p>
+        <p><small>Fedo Testing Service v1.0.0 | CORS Enabled ✅</small></p>
     </body>
     </html>
     """
@@ -152,6 +162,7 @@ async def health_check():
         "status": "healthy",
         "service": "Fedo Callback Service",
         "timestamp": datetime.utcnow().isoformat(),
+        "cors_enabled": True,
         "endpoints": {
             "callback": "/consint/demo-callback (POST only)",
             "results": "/results",
@@ -170,6 +181,7 @@ async def callback_info():
         "message": "This endpoint accepts POST requests only",
         "method": "POST",
         "endpoint": "/consint/demo-callback",
+        "cors_enabled": True,
         "expected_payload": {
             "customerID": "string",
             "scanID": "string",
@@ -221,7 +233,10 @@ async def receive_callback(request: Request, callback_data: CallbackData):
         results = []
         if log_file.exists():
             with open(log_file, 'r') as f:
-                results = json.load(f)
+                try:
+                    results = json.load(f)
+                except json.JSONDecodeError:
+                    results = []
         
         results.append({
             "received_at": received_at,
@@ -303,7 +318,7 @@ async def get_all_results_html(request: Request, limit: int = 100, offset: int =
                 
                 <div class="stats">
                     <strong>Total Callbacks:</strong> {total} | 
-                    <strong>Showing:</strong> {offset + 1} - {min(offset + limit, total)} |
+                    <strong>Showing:</strong> {offset + 1 if total > 0 else 0} - {min(offset + limit, total)} |
                     <a href="/">← Back to Home</a> | 
                     <a href="/results?format=json">View as JSON</a>
                 </div>
